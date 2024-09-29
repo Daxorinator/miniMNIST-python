@@ -2,7 +2,6 @@ from dataclasses import dataclass
 from typing import List
 import math
 import random
-from memory_profiler import profile, memory_usage
 
 # Neural Network Configuration
 INPUT_SIZE = 784
@@ -48,7 +47,7 @@ class InputData:
     labels: [int]
     imageCount: int
 
-@profile
+
 def load_mnist_images(filename: str) -> (int, [[float]]):
     with open(filename, 'rb') as f:
         # Read the magic number
@@ -67,7 +66,7 @@ def load_mnist_images(filename: str) -> (int, [[float]]):
                 
         return (num_images, float_images)
 
-@profile
+
 def load_mnist_labels(filename: str) -> (int, [int]):
     with open(filename, 'rb') as f:
         # Read the magic number
@@ -75,11 +74,12 @@ def load_mnist_labels(filename: str) -> (int, [int]):
 
         # Read number of labels, read all labels into list of bytes
         num_labels = int.from_bytes(f.read(4), "big") 
-        labels = list(iter(lambda: int.from_bytes(f.read(1), "big"), b''))
+        labels = list(iter(lambda: f.read(1), b''))
+
+        labels = [int.from_bytes(label, "big") for label in labels]
 
         return (num_labels, labels)
 
-@profile
 def forward_propagation(layer: Layer, inputs: List[float]) -> List[float]:
     # Create an outputs list of length layer.outputs
     outputs = [0] * layer.outputs
@@ -97,7 +97,7 @@ def forward_propagation(layer: Layer, inputs: List[float]) -> List[float]:
     # Return the weighted outputs
     return outputs
 
-@profile
+
 def softmax(input: List[float]) -> List[float]:
     # Find the biggest input
     max_input = max(input)
@@ -115,11 +115,13 @@ def softmax(input: List[float]) -> List[float]:
     # This makes the sum of all output values = 1
     for i in range(len(output)):
         output[i] /= sum
+    
+    return output
 
-@profile
+
 def backward_propagation(layer: Layer, input: List[float], output_grad: List[float], learning_rate: float) -> List[float]:
     # Initialise the input gradient list
-    input_grad = [0.00] * len(output_grad)
+    input_grad = [0.00] * len(input)
     
     # For all outputs in the layer
     for i in range(layer.outputs):
@@ -141,7 +143,7 @@ def backward_propagation(layer: Layer, input: List[float], output_grad: List[flo
 
     return input_grad
 
-@profile
+
 def train(net: Network, input: [float], label: int, learning_rate: float):
     final_output = [0] * OUTPUT_SIZE
     hidden_output = [0] * HIDDEN_SIZE
@@ -150,34 +152,34 @@ def train(net: Network, input: [float], label: int, learning_rate: float):
     hidden_grad = [0] * HIDDEN_SIZE
 
     # Forward Pass: Input to the Hidden layer
-    forward_propagation(net.hidden, input, hidden_output)
-    for i in range(HIDDEN_SIZE):
-        # ReLU activation function
-        hidden_output[i] = hidden_output[i] if hidden_output[i] > 0 else 0
+    hidden_output = forward_propagation(net.hidden, input)
+
+    # ReLU activation function
+    hidden_output = [(output if output > 0 else 0) for output in hidden_output]
 
     # Forward Pass: Hidden to the Output layer
-    forward_propagation(net.output, hidden_output, final_output)
-    softmax(final_output, OUTPUT_SIZE)
+    final_outout = forward_propagation(net.output, hidden_output)
+    final_outout = softmax(final_output)
 
     # Compute the Output Gradient
     for i in range(OUTPUT_SIZE):
-        output_grad[i] = final_output[i] - (i == label)#
+        output_grad[i] = final_output[i] - (i == label)
     
     # Backward propagation pass: Output Layer to Hidden Layer
-    backward_propagation(net.output, hidden_output, output_grad, hidden_grad, learning_rate)
+    hidden_grad = backward_propagation(net.output, hidden_output, output_grad, learning_rate)
 
     # Backpropagate through the ReLU activation function
     for i in range(HIDDEN_SIZE):
         hidden_grad[i] *= hidden_output[i] if hidden_output[i] > 0 else 0
-    
-    backward_propagation(net.hidden, input, hidden_grad, None, learning_rate)
 
-@profile
+    backward_propagation(net.hidden, input, hidden_grad, learning_rate)
+
+
 def predict(net: Network, input: [float]) -> int:
     hidden_output = [0] * HIDDEN_SIZE
     final_output = [0] * OUTPUT_SIZE
 
-    forward_propagation(net.hiden, input, hidden_output)
+    forward_propagation(net.hidden, input, hidden_output)
     for i in range(HIDDEN_SIZE):
         hidden_output[i] = hidden_output[i] if hidden_output[i] > 0 else 0
 
@@ -194,51 +196,45 @@ def main():
     num_images, training_images = load_mnist_images("train-images.idx3-ubyte")
     _, training_labels = load_mnist_labels("train-labels.idx1-ubyte")
 
-    # training_data = InputData(training_images, training_labels, num_images)
+    training_data = InputData(training_images, training_labels, num_images)
 
-    # num_test_images, test_images = load_mnist_images("t10k-images.idx3-ubyte")
-    # _, test_labels = load_mnist_labels("t10k-labels.idx1-ubyte")
+    num_test_images, test_images = load_mnist_images("t10k-images.idx3-ubyte")
+    _, test_labels = load_mnist_labels("t10k-labels.idx1-ubyte")
 
-    # test_data = InputData(test_images, test_labels, num_test_images)
+    test_data = InputData(test_images, test_labels, num_test_images)
 
-    # hidden_layer = Layer(INPUT_SIZE, HIDDEN_SIZE)
-    # output_layer = Layer(HIDDEN_SIZE, OUTPUT_SIZE)
+    hidden_layer = Layer(INPUT_SIZE, HIDDEN_SIZE)
+    output_layer = Layer(HIDDEN_SIZE, OUTPUT_SIZE)
 
-    # net = Network(hidden_layer, output_layer)
+    net = Network(hidden_layer, output_layer)
 
-    # img = [float]
-
-    # for epoch in range(EPOCHS):
-    #     total_loss = 0.00
-    #     for i in range(0, len(training_images), BATCH_SIZE):
-    #         for j in range(0, BATCH_SIZE):
-    #             idx = i + j
-    #             for k in range(INPUT_SIZE):
-    #                 img[k] = training_data.images[idx * INPUT_SIZE + k] / 255.0
+    for epoch in range(EPOCHS):
+        total_loss = 0.00
+        for i in range(0, len(training_images), BATCH_SIZE):
+            for j in range(0, BATCH_SIZE):
+                idx = i + j
                 
-    #             train(net, img, training_data.labels[idx], LEARNING_RATE)
+                train(net, training_data.images[idx], training_data.labels[idx], LEARNING_RATE)
 
-    #             hidden_output = [0.00] * HIDDEN_SIZE
-    #             final_output = [0.00] * OUTPUT_SIZE
+                # hidden_output = [0.00] * HIDDEN_SIZE
+                # final_output = [0.00] * OUTPUT_SIZE
 
-    #             forward_propagation(net.hidden, img, hidden_output)
+                hidden_output = forward_propagation(net.hidden, training_data.images[idx])
 
-    #             for k in range(HIDDEN_SIZE):
-    #                 hidden_output[k] = hidden_output[k] if hidden_output[k] > 0 else 0
+                for k in range(HIDDEN_SIZE):
+                    hidden_output[k] = hidden_output[k] if hidden_output[k] > 0 else 0
                 
-    #             forward_propagation(net.output, hidden_output, final_output)
-    #             softmax(final_output, OUTPUT_SIZE)
+                final_output = forward_propagation(net.output, hidden_output)
+                final_output = softmax(final_output)
 
-    #             total_loss += -math.log(final_output[training_data.labels[idx]] + 1e-10)
+                total_loss += -math.log(final_output[training_data.labels[idx]] + 1e-10)
             
-    #     correct = 0
-    #     for i in range(num_test_images):
-    #         for k in range(INPUT_SIZE):
-    #             img[k] = test_data.images[i * INPUT_SIZE + k] / 255.0
-    #         if (predict(net, img) == test_data.labels[i]):
-    #             correct += 1
+        correct = 0
+        for i in range(num_test_images):
+            if (predict(net, test_data.images[i]) == test_data.labels[i]):
+                correct += 1
         
-    #     print(f"Epoch {epoch + 1}, Accuracy: {correct / num_test_images * 100.00}, Avg Loss: {total_loss / num_images}")
+        print(f"Epoch {epoch + 1}, Accuracy: {correct / num_test_images * 100.00}, Avg Loss: {total_loss / num_images}")
 
 if __name__ == '__main__':
     main()
