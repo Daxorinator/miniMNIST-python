@@ -43,12 +43,12 @@ class Network:
 
 @dataclass
 class InputData:
-    images: [[float]]
-    labels: [int]
+    images: List[List[float]]
+    labels: List[int]
     imageCount: int
 
 
-def load_mnist_images(filename: str) -> (int, [[float]]):
+def load_mnist_images(filename: str) -> (int, List[List[float]]):
     with open(filename, 'rb') as f:
         # Read the magic number
         f.read(4)
@@ -67,7 +67,7 @@ def load_mnist_images(filename: str) -> (int, [[float]]):
         return (num_images, float_images)
 
 
-def load_mnist_labels(filename: str) -> (int, [int]):
+def load_mnist_labels(filename: str) -> (int, List[int]):
     with open(filename, 'rb') as f:
         # Read the magic number
         f.read(4)
@@ -158,8 +158,8 @@ def train(net: Network, input: [float], label: int, learning_rate: float):
     hidden_output = [(output if output > 0 else 0) for output in hidden_output]
 
     # Forward Pass: Hidden to the Output layer
-    final_outout = forward_propagation(net.output, hidden_output)
-    final_outout = softmax(final_output)
+    final_output = forward_propagation(net.output, hidden_output)
+    final_output = softmax(final_output)
 
     # Compute the Output Gradient
     for i in range(OUTPUT_SIZE):
@@ -179,12 +179,12 @@ def predict(net: Network, input: [float]) -> int:
     hidden_output = [0] * HIDDEN_SIZE
     final_output = [0] * OUTPUT_SIZE
 
-    forward_propagation(net.hidden, input, hidden_output)
+    hidden_output = forward_propagation(net.hidden, input)
     for i in range(HIDDEN_SIZE):
         hidden_output[i] = hidden_output[i] if hidden_output[i] > 0 else 0
 
-    forward_propagation(net.output, hidden_output, final_output)
-    softmax(final_output, OUTPUT_SIZE)
+    final_output = forward_propagation(net.output, hidden_output)
+    final_output = softmax(final_output)
 
     # Valid predictions are 0-9, same as the indexes of the final_output list
     # Get the index of the output with the highest weight, that's the predicted answer
@@ -238,21 +238,3 @@ def main():
 
 if __name__ == '__main__':
     main()
-
-# inputs = 2
-# outputs = 1
-
-# layer = Layer([0] * inputs * outputs, [0] * outputs, inputs, outputs)
-
-# initialise_layer(layer, inputs, outputs)
-
-# print(layer)
-
-# layer_inputs = [0.5, 0.5]
-# layer_outputs = [0]
-
-# forward_propagation(layer, layer_inputs, layer_outputs)
-
-# print(layer_inputs)
-# print(layer_outputs)
-
