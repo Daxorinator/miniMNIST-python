@@ -124,6 +124,17 @@ def forward_propagation(layer: Layer, inputs: np.ndarray) -> np.ndarray:
     """
     Performs forward propagation on the specified Layer with the provided inputs and returns the pre-activation outputs of the layer.
 
+    Forward propagation computes the output of a layer given its inputs.
+    In a fully connected layer, each output is the weighted sum of *all* inputs
+    The weights represent how much each input contributes to each neuron.
+    This can be done for all output neurons at once using matrix multiplication.
+    This results in an output array of neurons which the biases can then be added on to,
+    to increase the weight of each output prior to activation
+    
+    The transpose is taken as the weights matrix is in the format (inputs, outputs)
+    and the inputs array is in the format (inputs, 1) - for matrix multiplication,
+    the format must be (outputs, inputs) to match the size of (inputs, 1)
+
     :param layer: The Layer to be acted upon
     :param inputs: The inputs to the layer
 
@@ -134,37 +145,110 @@ def forward_propagation(layer: Layer, inputs: np.ndarray) -> np.ndarray:
     :rtype: np.ndarray
     """
 
-    # Forward propagation computes the output of a layer given its inputs.
-    # In a fully connected layer, each output is the weighted sum of *all* inputs
-    # The weights represent how much each input contributes to each neuron.
-    # This can be done for all output neurons at once using matrix multiplication.
-    # This results in an output array of neurons which the biases can then be added on to,
-    # to increase the weight of each output prior to activation
-    #
-    # The transpose is taken as the weights matrix is in the format (inputs, outputs)
-    # and the inputs array is in the format (inputs, 1) - for matrix multiplication,
-    # the format must be (outputs, inputs) to match the size of (inputs, 1)
-    return np.dot(inputs, layer.weights.transpose()) + layer.biases
+    return np.dot(inputs, layer.weights) + layer.biases
 
 def softmax(x: np.ndarray) -> np.ndarray:
+    """
+    Applies the softmax activation function to the input array, and normalises the output.
+
+    The e^x function can generate incredibly high numbers if the input values are high - sometimes resulting in Infinity or an overflow.
+    This can be avoided by subtracting the maximum value of the input array, from all values in the array.
+    This works because x^0 = 1, and e^-y approaches 1 for extremely small values of y, and 0 for extremely large values of y.
+
+    This results in the "feature scaling" of the values so they exist only between 0 and 1.
+
+    The entries in the resulting array are then divided by its sum to produce a valid probability distribution,
+    i.e. they are normalised, so that the resulting class with the highest probability can be picked from the array.
+
+    :param x: The pre-activation output array of a neural network layer
+    :type x: np.ndarray
+
+    :returns: A probability distribution containing the normalised probabilities of the input values
+    :rtype: np.ndarray
+    """
     exp_x = np.exp(x - np.max(x, axis=1, keepdims=True))
     return exp_x / np.sum(exp_x, axis=1, keepdims=True)
 
 def relu(x: np.ndarray) -> np.ndarray:
+    """
+    Applies the Rectified Linear Unit (ReLU) activation function to the input array.
+    If the entries in the input array are greater than 0 they are returned, untouched.
+    If the values are less than 0, then they are clamped to 0.
+    """
     return np.maximum(0, x)
 
 def backward_propagation(layer: Layer, input: np.ndarray, output_grad: np.ndarray, learning_rate: float) -> np.ndarray:
-    input_grad = np.dot(output_grad, layer.weights)
-    layer.weights -= learning_rate * np.dot(output_grad.T, input)
-    layer.biases -= learning_rate * np.sum(output_grad, axis=0)
+    """
+    Performs backward propagation on the specified Layer with the provided inputs and output gradient of the layer, and returns the input gradient of the layer.
+
+    Backward propagation updates the weights and biases of the specified layer of the network.
+    It does this based on the derivative (gradient) of the "loss function" (a measure of 'how wrong' the neural network is),
+    with respect to the outputs. The gradient is used because it provides the "direction" where loss increases the most.
+    Adjusting in the opposite correction will provide the "most improvement for your input" so to speak.
+
+    This technique is called Gradient Descent minimisation and can be used to find the minimum of the loss function.
+    In practise, achieving the minimum would cause overfitting of the neural network, so Gradient Descent is applied
+    through training, until the loss value is sufficiently low.
+
+    The weights are updated based on the loss with respect to the weights, rather than the loss with respect to the outputs.
+    The loss with respect to the weights can be calculated by multiplying the loss with respect to the outputs, by the inputs.
+    The resulting matrix multiplication represents the gradient with respect to the weights - the gradients can then be subtracted
+    from the weights to adjust them. 
+
+    The layer biases are updated based on the gradient of the loss, with respect to the biases.
+    The biases are applied independent of the outputs, so their gradients are simply the sum of the output gradients
+
+    Lastly, the gradient of loss with respect to the inputs is calculated by taking the dot product of the output gradient,
+    and the layer weights - similar to how loss gradient with respect to weights is calculated. Calculating this is useful
+    because the inputs to the final layer, are the outputs from the hidden layer - so the input gradient can be used to
+    further back propagate in a multi-layer neural network.
+
+    :param layer: The layer to back propagate
+    :type layer: Layer
+
+    :param input: The layer inputs which led to the output gradient
+    :type input: np.ndarray
+
+    :param output_grad: The output gradient for the layer given the inputs specified in `input`
+    :type output_grad: np.ndarray
+
+    :param learning_rate: The learning rate of the neural network - prevents the network weights from wildly changing
+    :type learning_rate: float
+
+    """
+    layer.weights -= np.dot(input.transpose(), output_grad) * learning_rate
+
+    layer.biases -= np.sum(output_grad, axis=0) * learning_rate
+
+    input_grad = np.dot(output_grad, layer.weights.transpose())
+
     return input_grad
 
 def train(net: Network, input: np.ndarray, label: np.ndarray, learning_rate: float):
-    # Forward pass
+    """
+    Trains the provided neural network with the given input array and label array, at the specified learning rate.
+
+    :param net: The network to be trained
+    :type net: Network
+
+    :param input: The array of inputs to use for training
+    :type input: np.ndarray
+
+    :param label: The array of true labels to use for training
+    :type label: np.ndarray
+
+    :param learning_rate: The learning rate of the network which slows learning to a reasonable rate
+    :type learning_rate: float
+    """
+
+    # Forward pass where the hidden layer receives the images and is activated by the ReLU activation function
     hidden_output = relu(forward_propagation(net.hidden, input))
+    # Foward pass where the output layer receives the hidden layer output and is activated by the SoftMax activation function
     final_output = softmax(forward_propagation(net.output, hidden_output))
 
-    # Compute gradients
+    # Compute the output loss gradient using the Cross Entropy Loss function
+    # The gradient of the cross entropy loss with respect to the output *coincidentally* works out
+    # as the final outputs of the network, minus the true labels in the form 
     output_grad = final_output - label
     hidden_grad = backward_propagation(net.output, hidden_output, output_grad, learning_rate)
     hidden_grad *= (hidden_output > 0)
