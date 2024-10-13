@@ -215,6 +215,8 @@ def backward_propagation(layer: Layer, input: np.ndarray, output_grad: np.ndarra
     :param learning_rate: The learning rate of the neural network - prevents the network weights from wildly changing
     :type learning_rate: float
 
+    :returns: The loss gradient with respect to the layer inputs, based on the provided loss gradient with respect to the layer outputs
+    :rtype: np.ndarray
     """
     layer.weights -= np.dot(input.transpose(), output_grad) * learning_rate
 
@@ -250,46 +252,108 @@ def train(net: Network, input: np.ndarray, label: np.ndarray, learning_rate: flo
     # The gradient of the cross entropy loss with respect to the output *coincidentally* works out
     # as the final outputs of the network, minus the true labels in the form 
     output_grad = final_output - label
+    # The gradient of the hidden layer output can be gotten using back propagation with the output layer gradient
     hidden_grad = backward_propagation(net.output, hidden_output, output_grad, learning_rate)
+
+    # Only adjust the neurons in the hidden layer which were actually included in the output, i.e. those which were greater than zero (see: ReLU activation)
+    # The expression in the brackets returns a boolean (True or False, 1 or 0), the neurons which are not >0 will be multipled by zero and thus won't be modified    
     hidden_grad *= (hidden_output > 0)
 
+    # Perform backward propagation on the hidden layer using the hidden layer output gradient
     backward_propagation(net.hidden, input, hidden_grad, learning_rate)
 
 def predict(net: Network, input: np.ndarray) -> np.ndarray:
+    """
+
+    :param net: The network to generate a prediction with
+    :type net: Network
+
+    :param input: The input to the neural network
+    :type input: np.ndarray
+
+    :returns: An array containing the predictions for the provided inputs (or a single prediction if only one input was given)
+    :rtype: np.ndarray
+    """
+
+    # Use forward propagation to get the pre-activation output of the Hidden layer from the Input
+    # and apply the ReLU activation function to the output
     hidden_output = relu(forward_propagation(net.hidden, input))
+
+    # Use forward propagation to get the pre-activation output of the Output player from the Hidden layer output
+    # and apply the SoftMax activation function to the output
     final_output = softmax(forward_propagation(net.output, hidden_output))
+
+    # Return the index of the output neuron with the highest probability
+    # For this net, the returned index and the actual category are the same thing (because the prediction is a number from 0-9)
+    # For a net that predicts a non-numeric category, e.g. a type of flower, this index can be used to access a one-hot encoded list of labels
     return np.argmax(final_output, axis=1)
 
 def main():
+    # Load the training images and the number of training images in the dataset
     num_images, training_images = load_mnist_images("train-images.idx3-ubyte")
+    # Load the training labels
     _, training_labels = load_mnist_labels("train-labels.idx1-ubyte")
+    
+    # Instantiate an InputData struct containing the training data
     training_data = InputData(training_images, training_labels, num_images)
 
+    # Repeat above for the test data
     num_test_images, test_images = load_mnist_images("t10k-images.idx3-ubyte")
     _, test_labels = load_mnist_labels("t10k-labels.idx1-ubyte")
     test_data = InputData(test_images, test_labels, num_test_images)
 
-    net = Network(Layer.initialize(INPUT_SIZE, HIDDEN_SIZE), Layer.initialize(HIDDEN_SIZE, OUTPUT_SIZE))
+    # Instantiate a new Neural Network, with two new layers based on the parameters at the top of the file
+    net = Network(
+        hidden=Layer.initialize(inputs=INPUT_SIZE, outputs=HIDDEN_SIZE),
+        output=Layer.initialize(inputs=HIDDEN_SIZE, outputs=OUTPUT_SIZE)
+    )
 
+    # Loop for the number of training epochs (an epoch is a training session that runs until the entire training dataset is consumed)
     for epoch in range(EPOCHS):
+        # Instantitate the loss figure
         total_loss = 0.0
+        # Perform batch training using the batch size set at the top of the file
         for i in range(0, num_images, BATCH_SIZE):
+            # Take a sample of the training data and training labels based on the number of images trained, and the size of the batch
             batch_images = training_data.images[i:i+BATCH_SIZE]
             batch_labels = training_data.labels[i:i+BATCH_SIZE]
             
+            # Create a one-hot encoded array of true labels present in the batch
+            # A one-hot encoded array is the same as an I-matrix
+            # This effectively creates a matrix that mimics the output of the neural network, so its easier to calculate loss and check if predictions are correct
             one_hot_labels = np.eye(OUTPUT_SIZE)[batch_labels]
+
+            # Train the network with the images from the batch at the specified learning rate
             train(net, batch_images, one_hot_labels, LEARNING_RATE)
 
+            # Perform a forward propagation pass with the images in the batch,
+            # producing an output that reflects how "bad" the network is at the end of the batch
+            # This output is used to calculate Loss, an actual reflection of how good or bad the network is
             hidden_output = relu(forward_propagation(net.hidden, batch_images))
             final_output = softmax(forward_propagation(net.output, hidden_output))
             
-            # Use np.clip to avoid log(0)
-            log_probs = np.log(np.clip(final_output[np.arange(len(batch_labels)), batch_labels], 1e-10, 1.0))
+            # This line is a bit complicated because it contains a few tricks to prevent math errors
+            #
+            # Firstly range(len(batch_labels)) returns a list in the format [0, 1, 2, ..., n-1] i.e. an array where each entry is an index of batch_labels
+            # This is used to index final_output which is a 2D array by passing 2 indices separated by a comma:
+            #   First, a range is passed in, this creates a slice of the original final_output containing only the indices relevant to this batch
+            #   Secondly, each element in the slice (keep in mind, those elements would be arrays), is indexed using batch_labels which contains the true label for each input
+            #
+            # This returns a list the length of BATCH_SIZE, where each entry contains the probability of the true label for the given image in batch_images. 
+            # This is then clipped so that every entry has a minimum value of 1x10^-10, and maximum value of 1.0 - values outside will break log(x) or be invalid in the case of values >1
+            # The log is then taken to calculate the true loss (this comes from the log term in the Cross-Entropy Loss function)
+            log_probs = np.log(np.clip(final_output[range(len(batch_labels)), batch_labels], 1e-10, 1.0))
+            # This minimics the summation in the definition of Cross-Entropy Loss and adds the loss of this batch onto the loss from other batches
             total_loss -= np.sum(log_probs)
 
+        # Run predictions on the test data
         predictions = predict(net, test_data.images)
+        # Take the result and check how many of the results were right - this looks like [True True False False True False True] etc.
+        # Or you could represent it as integers: [1 1 0 0 1 0 1]
+        # and then take the mean (average) of that, to show the average correctness (accuracy) of the network 
         accuracy = np.mean(predictions == test_data.labels)
         
+        # Finally (at last!) print the current epoch number, and the accuracy and loss values that were calculated
         print(f"Epoch {epoch + 1}, Accuracy: {accuracy * 100:.2f}%, Avg Loss: {total_loss / num_images:.4f}")
 
 if __name__ == '__main__':
