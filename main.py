@@ -250,8 +250,9 @@ def train(net: Network, input: np.ndarray, label: np.ndarray, learning_rate: flo
 
     # Compute the output loss gradient using the Cross Entropy Loss function
     # The gradient of the cross entropy loss with respect to the output *coincidentally* works out
-    # as the final outputs of the network, minus the true labels in the form 
+    # as the final outputs of the network, minus the true labels in their one-hot form (see: one-hot encoding / identity matrix) 
     output_grad = final_output - label
+    
     # The gradient of the hidden layer output can be gotten using back propagation with the output layer gradient
     hidden_grad = backward_propagation(net.output, hidden_output, output_grad, learning_rate)
 
