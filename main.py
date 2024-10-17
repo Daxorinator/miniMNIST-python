@@ -1,5 +1,5 @@
-import numpy as np
 from dataclasses import dataclass
+import numpy as np
 
 # Neural Network Configuration
 INPUT_SIZE = 784
@@ -64,14 +64,14 @@ class InputData:
     Input data for the Neural Network, consisting of images, labels, and the number of images in the dataset
     :ivar images: An array of images
     :ivar labels: An array of labels
-    :ivar imageCount: The number of images in `images`
+    :ivar image_count: The number of images in `images`
     :type images: np.ndarray
     :type labels: np.ndarray
-    :type imageCount: int
+    :type image_count: int
     """
     images: np.ndarray
     labels: np.ndarray
-    imageCount: int
+    image_count: int
 
 def load_mnist_images(filename: str) -> (int, np.ndarray):
     """
@@ -353,7 +353,7 @@ def main():
         # Or you could represent it as integers: [1 1 0 0 1 0 1]
         # and then take the mean (average) of that, to show the average correctness (accuracy) of the network 
         accuracy = np.mean(predictions == test_data.labels)
-        
+
         # Finally (at last!) print the current epoch number, and the accuracy and loss values that were calculated
         print(f"Epoch {epoch + 1}, Accuracy: {accuracy * 100:.2f}%, Avg Loss: {total_loss / num_images:.4f}")
 
