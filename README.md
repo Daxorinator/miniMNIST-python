@@ -1,8 +1,12 @@
 # miniMNIST-python
 This project is an implementation of the neural network found in [miniMNIST-c](https://github.com/konrad-gajdus/miniMNIST-c), in Python, with NumPy.
+
 It is a minimal neural network for classifying handwritten digits from the MNIST dataset, and the entire implementation is **87 lines of code** according to `cloc`.
+
 Unlike [miniMNIST-c](https://github.com/konrad-gajdus/miniMNIST-c), this project makes use of one library: [NumPy](https://numpy.org/).
+
 NumPy is used for its powerful N-dimensional arrays which are extremely fast and allow the entire network to be vectorised and trained rapidly.
+
 It also makes translating the mathematics behind a simple feed-foward neural network into Python much easier as it provides useful functions such as the matrix dot product, the normal distribution, and the argmax function.
 
 ## Features
